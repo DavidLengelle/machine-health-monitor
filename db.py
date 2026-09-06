@@ -176,6 +176,22 @@ def get_measurements(machine_id: int, limit: int = 100) -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def get_all_measurements(machine_id: int) -> list[sqlite3.Row]:
+    """Return every measurement for one machine, oldest first.
+
+    Unlike ``get_measurements()`` there is no row limit: the anomaly detector
+    needs a machine's full history so it can split it into a training slice
+    and a slice to judge.
+    """
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT id, machine_id, recorded_at, temperature, vibration "
+            "FROM measurements WHERE machine_id = ? "
+            "ORDER BY recorded_at ASC, id ASC",
+            (machine_id,),
+        ).fetchall()
+
+
 def get_alerts(limit: int = 50) -> list[sqlite3.Row]:
     """Return the most recent alerts across all machines, newest first."""
     with _connect() as conn:
@@ -183,4 +199,19 @@ def get_alerts(limit: int = 50) -> list[sqlite3.Row]:
             "SELECT id, machine_id, raised_at, source, message "
             "FROM alerts ORDER BY raised_at DESC, id DESC LIMIT ?",
             (limit,),
+        ).fetchall()
+
+
+def get_alerts_for_machine(machine_id: int) -> list[sqlite3.Row]:
+    """Return every alert raised for one machine, oldest first.
+
+    The anomaly detector reads these back to avoid inserting an alert it has
+    already recorded for the same source and timestamp.
+    """
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT id, machine_id, raised_at, source, message "
+            "FROM alerts WHERE machine_id = ? "
+            "ORDER BY raised_at ASC, id ASC",
+            (machine_id,),
         ).fetchall()
