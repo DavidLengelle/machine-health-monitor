@@ -1,0 +1,21 @@
+# machine-health-monitor - industrial predictive-maintenance demo.
+#
+# Managed with uv:
+#   uv sync                                  # create the virtual environment
+#   uv run python simulator.py --duration 60 # generate sensor data
+
+[project]
+name = "machine-health-monitor"
+version = "0.1.0"
+description = "Predictive maintenance demo: sensor simulation, anomaly detection and an LLM assistant for factory operators"
+readme = "README.md"
+requires-python = ">=3.11"
+
+# db.py and simulator.py rely on the standard library only (sqlite3, random,
+# argparse, datetime). The operator assistant will add its dependencies here
+# later (see .env.example for the configuration it expects).
+dependencies = []
+
+[tool.uv]
+# This is an application, not a distributable package.
+package = false
