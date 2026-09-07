@@ -121,6 +121,15 @@ def get_machines() -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def get_machine(machine_id: int) -> sqlite3.Row | None:
+    """Return one machine by id, or None when no machine has that id."""
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT id, name, machine_type FROM machines WHERE id = ?",
+            (machine_id,),
+        ).fetchone()
+
+
 def add_measurement(
     machine_id: int,
     temperature: float,
@@ -215,3 +224,48 @@ def get_alerts_for_machine(machine_id: int) -> list[sqlite3.Row]:
             "ORDER BY raised_at ASC, id ASC",
             (machine_id,),
         ).fetchall()
+
+
+def get_recent_alerts_for_machine(
+    machine_id: int, limit: int = 10
+) -> list[sqlite3.Row]:
+    """Return the most recent alerts for one machine, newest first."""
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT id, machine_id, raised_at, source, message "
+            "FROM alerts WHERE machine_id = ? "
+            "ORDER BY raised_at DESC, id DESC LIMIT ?",
+            (machine_id, limit),
+        ).fetchall()
+
+
+def count_alerts_since(machine_id: int, since: str) -> int:
+    """Count the alerts raised for one machine at or after an ISO timestamp."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS total FROM alerts "
+            "WHERE machine_id = ? AND raised_at >= ?",
+            (machine_id, since),
+        ).fetchone()
+    return int(row["total"])
+
+
+def get_measurement_stats_since(machine_id: int, since: str) -> sqlite3.Row:
+    """Return sample count and min/max/avg temperature and vibration.
+
+    Only measurements recorded at or after the ``since`` ISO timestamp are
+    aggregated. When the window is empty the count is 0 and every min/max/avg
+    column is NULL.
+    """
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS sample_count, "
+            "MIN(temperature) AS min_temperature, "
+            "MAX(temperature) AS max_temperature, "
+            "AVG(temperature) AS avg_temperature, "
+            "MIN(vibration) AS min_vibration, "
+            "MAX(vibration) AS max_vibration, "
+            "AVG(vibration) AS avg_vibration "
+            "FROM measurements WHERE machine_id = ? AND recorded_at >= ?",
+            (machine_id, since),
+        ).fetchone()
