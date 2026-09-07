@@ -52,6 +52,15 @@ SEVERITY_LABELS: dict[str, dict[str, str]] = {
     "en": {"info": "Info", "warning": "Warning", "critical": "Critical"},
 }
 
+# The exact sentence the assistant must reply when the requested code or
+# information is not in the reference list, per language. This is the single
+# place to edit that wording; it is injected into the language directive
+# (block 3 of the system prompt), never hard-coded in the cached blocks.
+FALLBACK_MESSAGES: dict[str, str] = {
+    "fr": "Ce code ne figure pas dans la liste de référence.",
+    "en": "Code not found in the reference list.",
+}
+
 # Language-neutral part of the system prompt. It is the first system block and,
 # with the code list, forms the cached prefix (one cache entry for every
 # language). The answer language and the severity wording come from a separate
@@ -67,12 +76,12 @@ _INSTRUCTION_BASE = (
     "- Never invent or guess an error code, a probable cause, an operator "
     "action or a severity. Only repeat what is written in the list.\n"
     "- If the code or the information the operator asks for is not in the "
-    'list, reply with exactly this sentence and nothing else: "Code not '
-    'found in the reference list."\n'
+    "list, reply with exactly the fallback sentence given in the final "
+    "instruction block, and nothing else.\n"
     "- When you describe a code, give its label, probable cause and "
     "recommended operator action, exactly as written in the list.\n"
-    "- Answer the operator in the language and with the severity wording "
-    "defined in the final instruction block below."
+    "- Answer the operator in the language, and with the severity wording and "
+    "fallback sentence, defined in the final instruction block below."
 )
 
 
@@ -114,7 +123,8 @@ def _normalize_language(language: str) -> str:
 
 
 def _language_directive(language: str) -> str:
-    """Build the trailing system block: answer language and severity wording."""
+    """Build the trailing system block: answer language, severity wording and
+    the fallback sentence, all for the active language."""
     labels = SEVERITY_LABELS[language]
     mapping = ", ".join(f"{key} -> {shown}" for key, shown in labels.items())
     allowed = ", ".join(labels.values())
@@ -123,7 +133,10 @@ def _language_directive(language: str) -> str:
         f"and briefly.\n"
         f"The reference list writes each severity as info, warning or "
         f"critical. Show the severity to the operator using exactly this "
-        f"mapping: {mapping}. Use no other word for severity (only: {allowed})."
+        f"mapping: {mapping}. Use no other word for severity (only: {allowed}).\n"
+        f"Fallback sentence: when the requested code or information is not in "
+        f"the list, reply with exactly this text and nothing else: "
+        f'"{FALLBACK_MESSAGES[language]}"'
     )
 
 
@@ -132,8 +145,8 @@ def _build_system(language: str) -> list[dict[str, object]]:
 
     Block 1 (instruction) and block 2 (the full code list) are language-neutral
     and form the cached prefix - a single cache entry shared by every language.
-    Block 3 carries the answer language and severity wording; it is tiny and is
-    resent on every call.
+    Block 3 carries the answer language, the severity wording and the fallback
+    sentence; it is tiny and is resent on every call.
     """
     return [
         # 1. Language-neutral instruction.
