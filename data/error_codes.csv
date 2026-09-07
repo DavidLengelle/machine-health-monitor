@@ -1,0 +1,81 @@
+code,label,probable_cause,operator_action,severity
+E-101,"Spindle motor overcurrent","Mechanical binding or a dull cutting tool drawing excess current","Stop the cycle and inspect the spindle and tool for obstruction before restarting",critical
+E-102,"Spindle motor overtemperature","Prolonged heavy-duty cycle or blocked cooling airflow","Let the spindle cool down and clear the cooling vents",warning
+E-103,"Servo drive following error","Axis cannot keep up with the commanded motion because of load or an obstruction","Clear any obstruction on the axis and re-home the machine",critical
+E-104,"Servo drive bus undervoltage","Mains supply dip or a loose power connection at the drive","Check the incoming supply and the drive power wiring",warning
+E-105,"Servo drive bus overvoltage","Regeneration during rapid deceleration with a faulty braking resistor","Inspect the braking resistor and its wiring",warning
+E-106,"Motor encoder signal lost","Damaged encoder cable or connector on the motor","Reseat or replace the motor encoder cable",critical
+E-107,"Axis motion timeout","The move did not complete within the expected time","Check for mechanical drag and verify the axis is free to move",warning
+E-108,"Holding brake not releasing","Brake power supply fault or a worn holding brake","Do not force the axis; call maintenance to check the holding brake",critical
+E-109,"Spindle fails to reach target speed","Worn drive belt or a failing spindle bearing","Inspect the spindle drive belt and bearings",warning
+E-110,"Drive cooling fan failure","Fan clogged with dust or at the end of its life","Replace the drive cooling fan",warning
+E-201,"Part-present sensor no signal","Missing part or a misaligned photoelectric sensor","Confirm a part is loaded and realign the sensor",warning
+E-202,"Clamp-closed sensor not detected","Clamp not fully closed or a faulty proximity switch","Check the clamp movement and the proximity switch gap",warning
+E-203,"Tool-length probe no touch","Probe stylus damaged or contaminated","Clean or replace the tool-length probe stylus",warning
+E-204,"Vibration sensor over range","Excessive process vibration or a loose sensor mount","Stop and inspect the tool and workholding for looseness",critical
+E-205,"Temperature sensor open circuit","Broken thermocouple or a disconnected sensor lead","Reconnect or replace the temperature sensor",warning
+E-206,"Temperature sensor short circuit","Pinched or chafed sensor wiring","Inspect and repair the temperature sensor wiring",warning
+E-207,"Pressure transducer out of range","Failed transducer or a blocked sensing port","Verify the real pressure with a gauge and replace the transducer if needed",warning
+E-208,"Linear scale read error","Contamination on the glass scale or the read head","Clean the linear scale and the read head",warning
+E-209,"Proximity sensor always on","Metal debris on the sensor face or a wiring short","Clean the sensor face and check its wiring",info
+E-210,"Light curtain lens contamination","Dust or an oil film on the light curtain optics","Clean the light curtain lenses at the next stop",info
+E-301,"Supply air pressure low","Compressed air supply below setpoint or a leak upstream","Check the shop air supply and the inlet regulator",warning
+E-302,"Supply air pressure lost","Main air valve closed or a major line rupture","Stop work and restore the compressed air supply",critical
+E-303,"Clamp cylinder fails to extend","Blocked flow control or a failed solenoid valve","Check the clamp solenoid valve and the flow controls",warning
+E-304,"Clamp cylinder fails to retract","Seized cylinder or an exhaust restriction","Inspect the clamp cylinder and its exhaust muffler",warning
+E-305,"Air dryer dew point high","Saturated desiccant or an air dryer fault","Have the air dryer serviced",warning
+E-306,"Excessive air consumption detected","Significant pneumatic leak in the tooling","Perform a leak check on the tool air lines",warning
+E-307,"Vacuum level insufficient","Clogged vacuum filter or a leak at the suction cups","Replace the vacuum filter and check the suction cups",warning
+E-308,"Lubricator oil level low","Air-line lubricator reservoir near empty","Refill the air-line lubricator with the specified oil",info
+E-309,"Water in air filter bowl","Auto-drain failed on the filter regulator","Manually drain the filter bowl and check the auto-drain",info
+E-310,"Pneumatic valve response slow","Contaminated valve or low ambient temperature","Cycle the valve a few times and check the air quality",info
+E-401,"Emergency stop active","An emergency stop button has been pressed","Find out why the E-stop was pressed, make the area safe, then reset and re-arm",critical
+E-402,"Safety gate open","A guard door was opened during automatic mode","Close the safety gate and acknowledge the fault before restarting",critical
+E-403,"Light curtain interrupted","An object or a person broke the light curtain beam","Clear the protected area and reset the light curtain",critical
+E-404,"Safety controller fault","Internal diagnostic fault in the safety PLC","Do not bypass; call maintenance to inspect the safety controller",critical
+E-405,"Dual-channel input mismatch","One channel of a safety device has failed or is miswired","Report to maintenance; a safety input needs inspection",critical
+E-406,"Safety relay welded contact","Output contact stuck closed at the end of its life","Take the cell out of service and replace the safety relay",critical
+E-407,"Muting sensor fault","Muting sensors out of sequence or blocked","Clear the muting sensors and check their alignment",warning
+E-408,"Enabling device released","The three-position enable switch was let go during teach mode","Hold the enabling device correctly to continue jogging",warning
+E-409,"Area scanner zone violation","Someone entered the protected floor zone","Clear the scanner zone and reset",critical
+E-410,"Safe torque off requested","The STO input was dropped by a safety device","Resolve the triggering safety device, then reset STO",critical
+E-501,"Fieldbus node offline","An EtherCAT or PROFINET device is not responding","Check the network cabling and the power to the affected node",critical
+E-502,"Fieldbus frame errors high","Damaged network cable or electrical noise on the line","Inspect the fieldbus cable and reroute it away from power lines",warning
+E-503,"PLC heartbeat lost","The cell PLC is not updating the watchdog signal","Check the PLC status and the link to the robot controller",critical
+E-504,"MES connection lost","Plant network or MES server unavailable","Notify IT; run in local mode only if permitted",warning
+E-505,"Barcode scanner no response","Scanner unplugged or its firmware has hung","Power-cycle the barcode scanner",warning
+E-506,"Robot-to-cell handshake timeout","The signal exchange was not completed in time","Check the interlock signals between the robot and the cell",warning
+E-507,"IO-Link device error","A smart sensor is reporting a device-level fault","Read the IO-Link device diagnostics and replace the sensor if faulty",warning
+E-508,"Time synchronization lost","The NTP time source is unreachable","Restore the connection to the time server",info
+E-509,"Duplicate IP address detected","Two devices are configured with the same address","Correct the network configuration of the newly added device",warning
+E-510,"OPC UA subscription dropped","The client or server connection was reset","Reconnect the OPC UA client",info
+E-601,"Drill bit broken","Tool breakage detected by spindle load or the tool probe","Remove the broken drill bit, inspect the hole, and load a new tool",critical
+E-602,"Drill bit worn beyond limit","The tool life counter has reached its limit","Replace the drill bit and reset the tool life counter",warning
+E-603,"Wrong tool loaded","The tool ID does not match the program requirement","Load the tool called for by the program",warning
+E-604,"Tool not clamped in spindle","Drawbar not fully engaged or a dirty spindle taper","Clean the tool taper and verify that the drawbar clamps fully",critical
+E-605,"Rivet feed jam","A rivet is stuck in the feed track","Clear the jammed rivet from the feed system",warning
+E-606,"Rivet upset force out of tolerance","Worn anvil or an incorrect rivet size","Check the anvil condition and confirm the rivet size",warning
+E-607,"Collet worn","The collet no longer grips the tool within specification","Replace the collet",warning
+E-608,"Tool magazine position fault","The magazine is not indexed to the correct pocket","Re-index the tool magazine and check the position sensor",warning
+E-609,"Coolant flow to tool low","Clogged coolant nozzle or a low coolant level","Clear the coolant nozzle and top up the coolant",warning
+E-610,"Countersink depth out of tolerance","Tool wear or an incorrect tool offset","Re-measure the countersink and update the tool offset",warning
+E-701,"Robot mastering lost","Encoder reference lost after a power loss or a collision","Perform the robot mastering procedure before returning to production",critical
+E-702,"TCP calibration out of date","The tool center point was not verified within the required interval","Run the TCP calibration routine",warning
+E-703,"Vision system not calibrated","Camera-to-robot calibration is missing or has expired","Perform the hand-eye calibration",warning
+E-704,"Force sensor drift","The load cell zero has drifted beyond tolerance","Re-zero the force sensor with no load applied",warning
+E-705,"Axis home position mismatch","Home switch has shifted or the belt skipped a tooth","Re-home the machine and verify it against the reference pin",warning
+E-706,"Probe calibration failed","Dirty reference sphere or a damaged probe","Clean the reference sphere and repeat the probe calibration",warning
+E-707,"Laser tracker verification overdue","The volumetric accuracy check is past its due date","Schedule the laser tracker verification",info
+E-708,"Temperature compensation disabled","The thermal model is turned off or a sensor is missing","Enable temperature compensation and confirm the sensor readings",info
+E-709,"Fixture offset not set","The work coordinate origin has not been taught for this fixture","Teach the fixture offset before running the program",warning
+E-710,"Grid plate check failed","The measured grid deviates from nominal","Report the result to metrology; do not run precision features",warning
+E-801,"Program not found","The requested part program is missing from the controller","Load the correct part program",warning
+E-802,"Program checksum mismatch","Program file corrupted or edited outside of version control","Reload the released version of the program",critical
+E-803,"Controller battery low","The real-time clock or memory backup battery is near the end of its life","Schedule replacement of the controller backup battery",warning
+E-804,"Controller memory full","Log files or old programs are filling the storage","Archive and clear old files from the controller",warning
+E-805,"Axis soft limit reached","The programmed move exceeds the software travel limit","Check the program offsets and jog the axis back into range",warning
+E-806,"Cycle aborted by operator","Feed hold or reset was pressed during the cycle","Return the machine to a safe start point and restart the cycle",info
+E-807,"Power supply 24V out of range","Overloaded or failing 24 V power supply","Check the 24 V load and the power supply output",warning
+E-808,"Cabinet temperature high","Cabinet cooling unit fault or a blocked filter","Clean or service the control cabinet cooling unit",warning
+E-809,"UPS on battery","Incoming mains power has been lost","Save the machine state and prepare for a controlled shutdown",critical
+E-810,"Firmware version mismatch","Module firmware does not match the project configuration","Update the module firmware to the released version",warning
