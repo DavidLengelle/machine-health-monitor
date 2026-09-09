@@ -160,8 +160,17 @@ bord Streamlit à côté d'un assistant propulsé par l'API Anthropic qui répon
 
 ## Captures d'écran
 
-Voir les deux images dans la version anglaise : `docs/dashboard.png` (vue d'ensemble de
-la flotte) et `docs/assistant.png` (assistant opérateur).
+![tableau de bord machine-health-monitor, vue d'ensemble de la flotte](docs/dashboard.png)
+
+*Vue d'ensemble — une carte par machine (voyant de santé, dernières température et
+vibration, nombre d'alertes sur 24 h), puis les courbes par machine avec les anomalies
+marquées.*
+
+![assistant opérateur machine-health-monitor](docs/assistant.png)
+
+*Assistant opérateur (français / anglais) — répond à une question de suivi sur la
+machine 2 à partir des données en base, puis explique le code d'erreur E-101 de la liste
+de référence.*
 
 ## Architecture
 
