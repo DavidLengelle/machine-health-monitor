@@ -78,8 +78,9 @@ MAX_POINTS = 500
 LANGUAGE_LABELS = {"fr": "Français", "en": "English"}
 
 # Chart colours, kept high-contrast for a projector.
-LINE_COLOR = "#1f4e79"
-ANOMALY_COLOR = "#d62728"
+LINE_COLOR = "#1f4e79"  # signal line and normal points (blue)
+ANOMALY_COLOR = "#d62728"  # anomaly diamonds (red)
+LIMIT_COLOR = "#6b7280"  # threshold rule: neutral grey, not part of the red series
 
 
 # --- Cached database access -------------------------------------------------
@@ -100,9 +101,9 @@ def load_machines() -> pd.DataFrame:
 def load_measurements(machine_id: int, limit: int) -> pd.DataFrame:
     """Return the last ``limit`` measurements of one machine, oldest first.
 
-    ``recorded_at`` is parsed to a timezone-aware Timestamp so the charts can
-    place it on a time axis. db.py returns newest first; the rows are reversed
-    here so the charts read left to right in chronological order.
+    ``recorded_at`` is parsed to a UTC Timestamp so the charts can place it on
+    a time axis. db.py returns newest first; the rows are reversed here so the
+    charts read left to right in chronological order.
     """
     rows = db.get_measurements(machine_id, limit=limit)
     frame = pd.DataFrame(
@@ -111,7 +112,9 @@ def load_measurements(machine_id: int, limit: int) -> pd.DataFrame:
     )
     if frame.empty:
         return frame
-    frame["recorded_at"] = pd.to_datetime(frame["recorded_at"])
+    # utc=True forces a single deterministic dtype (datetime64[ns, UTC]) so this
+    # column and alerts.raised_at parse identically and compare cleanly.
+    frame["recorded_at"] = pd.to_datetime(frame["recorded_at"], utc=True)
     return frame.iloc[::-1].reset_index(drop=True)
 
 
@@ -119,9 +122,9 @@ def load_measurements(machine_id: int, limit: int) -> pd.DataFrame:
 def load_alerts(machine_id: int) -> pd.DataFrame:
     """Return every alert of one machine, newest first.
 
-    Columns: id, machine_id, raised_at (timezone-aware Timestamp), source,
-    message. The full history is small and serves three needs at once: the
-    24 h count, the anomaly markers on the charts and the recent-alerts table.
+    Columns: id, machine_id, raised_at (UTC Timestamp), source, message. The
+    full history is small and serves three needs at once: the 24 h count, the
+    anomaly markers on the charts and the recent-alerts table.
     """
     rows = db.get_alerts_for_machine(machine_id)
     frame = pd.DataFrame(
@@ -130,7 +133,9 @@ def load_alerts(machine_id: int) -> pd.DataFrame:
     )
     if frame.empty:
         return frame
-    frame["raised_at"] = pd.to_datetime(frame["raised_at"])
+    # Same utc=True as load_measurements: both timestamp columns must share one
+    # dtype for the anomaly join in _mark_anomalies to work.
+    frame["raised_at"] = pd.to_datetime(frame["raised_at"], utc=True)
     return frame.iloc[::-1].reset_index(drop=True)
 
 
@@ -229,6 +234,15 @@ def render_header(machines: pd.DataFrame) -> None:
 # --- Zone 2: per-machine detail ----------------------------------------
 
 
+def _limit_line_shown(frame: pd.DataFrame, column: str, limit_value: float) -> bool:
+    """Whether _signal_chart draws the threshold rule for this signal.
+
+    The rule is only worth its vertical space once the signal climbs near the
+    limit; below 90 % of it the rule is dropped and the caption says so.
+    """
+    return bool(float(frame[column].max()) >= limit_value * 0.9)
+
+
 def _signal_chart(
     frame: pd.DataFrame,
     column: str,
@@ -240,9 +254,9 @@ def _signal_chart(
 
     A blue line with small faint dots for normal readings; large red diamonds
     for anomalies (readings whose timestamp matches an alert), carrying a
-    tooltip with the value and which detector flagged them. A dashed red rule
-    marks the fixed limit, but only when the data comes close enough to it for
-    the rule to be worth the vertical space.
+    tooltip with the value and which detector flagged them. A dashed grey rule
+    marks the threshold detector's fixed limit, shown only when the signal
+    comes near it (see _limit_line_shown).
     """
     axis_title = f"{label} ({unit})"
     base = alt.Chart(frame).encode(
@@ -266,10 +280,10 @@ def _signal_chart(
     )
 
     layers = [line, normal_points, anomaly_points]
-    if float(frame[column].max()) >= limit_value * 0.9:
+    if _limit_line_shown(frame, column, limit_value):
         limit_rule = (
             alt.Chart(pd.DataFrame({"limit": [limit_value]}))
-            .mark_rule(color=ANOMALY_COLOR, strokeDash=[6, 4], strokeWidth=1.5)
+            .mark_rule(color=LIMIT_COLOR, strokeDash=[6, 4], strokeWidth=1.5)
             .encode(y="limit:Q")
         )
         layers.append(limit_rule)
@@ -277,13 +291,21 @@ def _signal_chart(
     return alt.layer(*layers).properties(height=240).configure_view(strokeOpacity=0)
 
 
+# The anomaly join below matches a measurement to an alert by exact timestamp
+# equality: measurements["recorded_at"] == alerts["raised_at"]. This works only
+# because detection.py writes each alert's raised_at as a verbatim copy of the
+# flagged measurement's recorded_at, and both columns are parsed with the same
+# pd.to_datetime(..., utc=True) so their dtype and offset match. The match has
+# no tolerance: format drift, added sub-second precision, or an alert stored
+# with a different timestamp (e.g. db.add_alert's default "now") would silently
+# drop the marker. In production, an alerts.measurement_id foreign key joined on
+# the id would be robust no matter how timestamps are stored.
 def _mark_anomalies(measurements: pd.DataFrame, alerts: pd.DataFrame) -> pd.DataFrame:
     """Return ``measurements`` with ``is_anomaly`` and ``alert_source`` columns.
 
     A measurement is an anomaly when an alert was raised at the exact same
-    timestamp (the detector stores an alert's ``raised_at`` as the flagged
-    measurement's ``recorded_at``). ``alert_source`` lists every detector that
-    flagged it, for the chart tooltip.
+    timestamp. ``alert_source`` lists every detector that flagged it, for the
+    chart tooltip.
     """
     if alerts.empty:
         return measurements.assign(is_anomaly=False, alert_source="")
@@ -333,11 +355,34 @@ def render_detail(machines: pd.DataFrame) -> None:
             width="stretch",
         )
         anomalies = int(marked["is_anomaly"].sum())
-        st.caption(
-            f"{len(marked)} measurements shown · {anomalies} marked as anomalies "
-            f"(red diamonds) · dashed line = detector limit "
-            f"({TEMPERATURE_LIMIT:g} °C / {VIBRATION_LIMIT:g} g)"
+        hidden_lines = [
+            name
+            for name, shown in (
+                ("temperature", _limit_line_shown(marked, "temperature", TEMPERATURE_LIMIT)),
+                ("vibration", _limit_line_shown(marked, "vibration", VIBRATION_LIMIT)),
+            )
+            if not shown
+        ]
+        marked_as = "an anomaly" if anomalies == 1 else "anomalies"
+        caption = (
+            f"{len(marked)} measurements shown, {anomalies} marked as {marked_as} "
+            f"(red diamonds). The dashed grey line is the threshold detector's "
+            f"fixed limit ({TEMPERATURE_LIMIT:g} °C / {VIBRATION_LIMIT:g} g): a "
+            f"reading at or above it is an anomaly on its own, while red diamonds "
+            f"below the line were flagged by the IsolationForest model, not the "
+            f"threshold."
         )
+        if len(hidden_lines) == 2:
+            caption += (
+                " The temperature and vibration limit lines are hidden here "
+                "because both signals stay below 90% of the limit."
+            )
+        elif hidden_lines:
+            caption += (
+                f" The {hidden_lines[0]} limit line is hidden here because the "
+                f"signal stays below 90% of the limit."
+            )
+        st.caption(caption)
 
     st.markdown("**10 most recent alerts**")
     if alerts.empty:
