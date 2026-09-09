@@ -360,10 +360,25 @@ def render_detail(machines: pd.DataFrame) -> None:
 # --- Zone 3: operator assistant --------------------------------------
 
 
-def _ask_assistant(question: str, language: str) -> str:
-    """Call :func:`assistant.ask`, turning any failure into a readable answer."""
+def _as_markdown_lines(text: str) -> str:
+    """Turn plain newlines into Markdown hard breaks so each line stays on its own.
+
+    The assistant lays an error-code answer out with one field per line using
+    single newlines; Markdown would otherwise fold them into one paragraph.
+    """
+    return text.replace("\n", "  \n")
+
+
+def _ask_assistant(
+    question: str, language: str, history: list[dict[str, str]]
+) -> str:
+    """Call :func:`assistant.ask`, turning any failure into a readable answer.
+
+    ``history`` is the running conversation so the assistant can follow up on
+    an earlier question.
+    """
     try:
-        return assistant.ask(question, language=language)
+        return assistant.ask(question, language=language, history=history)
     except assistant.ConfigurationError as exc:
         return f"⚠️ Configuration problem: {exc}"
     except Exception as exc:  # noqa: BLE001 - never let the dashboard crash here
@@ -371,7 +386,12 @@ def _ask_assistant(question: str, language: str) -> str:
 
 
 def render_assistant() -> None:
-    """Render the conversation history, the language selector and the input box."""
+    """Render the language selector, the input box, then the conversation.
+
+    The input box is kept above the conversation, and the conversation is
+    ordered newest exchange first, so the latest answer sits right under the
+    box.
+    """
     st.subheader("Operator assistant")
 
     if assistant is None:
@@ -400,10 +420,7 @@ def render_assistant() -> None:
             "Everything above keeps working without it."
         )
 
-    for message in st.session_state["assistant_history"]:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
+    # The input box stays at the top, always above the conversation.
     with st.form("assistant_form", clear_on_submit=True):
         question = st.text_input(
             "Question",
@@ -414,12 +431,23 @@ def render_assistant() -> None:
     if submitted and question.strip():
         cleaned = question.strip()
         with st.spinner("Contacting the assistant…"):
-            answer = _ask_assistant(cleaned, language)
+            # Pass the transcript so far (before this question) for context.
+            answer = _ask_assistant(
+                cleaned, language, list(st.session_state["assistant_history"])
+            )
         st.session_state["assistant_history"].append({"role": "user", "content": cleaned})
         st.session_state["assistant_history"].append(
             {"role": "assistant", "content": answer}
         )
         st.rerun()
+
+    # Conversation below, most recent exchange first (question then its answer).
+    history = st.session_state["assistant_history"]
+    exchanges = [history[start : start + 2] for start in range(0, len(history), 2)]
+    for exchange in reversed(exchanges):
+        for message in exchange:
+            with st.chat_message(message["role"]):
+                st.markdown(_as_markdown_lines(message["content"]))
 
 
 # --- Page composition -------------------------------------------------

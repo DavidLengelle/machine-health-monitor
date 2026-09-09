@@ -9,7 +9,9 @@ a tool actually returned.
 ``ask()`` drives the tool-use loop: it sends the question with the tool
 definitions, executes every tool the model asks for, feeds the results back
 and repeats until the model answers with text, capped at ``MAX_TOOL_TURNS``
-turns.
+turns. Pass ``history=`` (a list of earlier ``{"role", "content"}`` messages)
+so the model can resolve a follow-up like "and machine 2?"; the interactive
+loop and the Streamlit dashboard do this, the one-shot CLI does not.
 
 The operator can be answered in French or English (``ask(question, language=...)``
 or the ``--lang`` CLI flag / ``ASSISTANT_LANG`` environment variable).
@@ -50,6 +52,11 @@ MAX_TOKENS = 2048
 
 # Hard cap on the tool-use loop: at most this many model calls per question.
 MAX_TOOL_TURNS = 5
+
+# Most prior chat messages replayed as context for a follow-up question. Kept
+# even (whole user/assistant exchanges) and small, so a long conversation does
+# not blow up the token bill.
+MAX_HISTORY_MESSAGES = 10
 
 # How much of a tool result is echoed by the DEBUG_TOKENS=1 output.
 TOOL_DEBUG_MAX_CHARS = 300
@@ -128,7 +135,15 @@ _INSTRUCTION_BASE = (
     "list, reply with exactly the fallback sentence given in the final "
     "instruction block, and nothing else.\n"
     "- When you describe a code, give its label, probable cause and "
-    "recommended operator action, exactly as written in the list.\n"
+    "recommended operator action, exactly as written in the list. Lay the "
+    "answer out with one item per line, in this order and nothing else:\n"
+    "  line 1: the code, for example E-101\n"
+    "  line 2: the severity written between vertical bars, using the wording "
+    "from the final instruction block, for example | severity: critical |\n"
+    "  line 3: the label, then the probable cause\n"
+    "  line 4: the recommended operator action\n"
+    "  Separate these lines with a single newline, add no blank line, no "
+    "bullet and no extra heading.\n"
     "\n"
     "Tone: the operator is standing at the machine and needs facts fast, not "
     "politeness.\n"
@@ -287,13 +302,43 @@ def _answer_text(response: object) -> str:
     ).strip()
 
 
-def _ask_anthropic(question: str, language: str) -> str:
+def _prepare_history(
+    history: list[dict[str, str]] | None,
+) -> list[dict[str, str]]:
+    """Return the last few complete exchanges from a prior conversation.
+
+    ``history`` is the caller's running transcript, oldest first, each item
+    ``{"role": "user" | "assistant", "content": <text>}``. Anything malformed
+    or out of order is dropped so the result strictly alternates, starts with a
+    user turn and ends with an assistant turn - ready to sit in front of the
+    new question. Trimmed to the last ``MAX_HISTORY_MESSAGES`` messages.
+    """
+    if not history:
+        return []
+    cleaned: list[dict[str, str]] = []
+    for item in history:
+        role = item.get("role")
+        content = item.get("content")
+        expected = "user" if len(cleaned) % 2 == 0 else "assistant"
+        if role == expected and isinstance(content, str) and content:
+            cleaned.append({"role": role, "content": content})
+    if len(cleaned) % 2 == 1:
+        cleaned.pop()  # drop a trailing lone question, keep whole exchanges
+    return cleaned[-MAX_HISTORY_MESSAGES:]
+
+
+def _ask_anthropic(
+    question: str,
+    language: str,
+    history: list[dict[str, str]] | None = None,
+) -> str:
     """Answer one question, running the tool-use loop until the model is done.
 
-    Sends the question together with the read-only tool definitions, executes
-    every tool the model asks for, feeds the results back and repeats until
-    the model replies with text. The loop is capped at MAX_TOOL_TURNS model
-    calls; past that the language's tool-limit message is returned.
+    Sends the question (preceded by any ``history`` of earlier exchanges)
+    together with the read-only tool definitions, executes every tool the
+    model asks for, feeds the results back and repeats until the model replies
+    with text. The loop is capped at MAX_TOOL_TURNS model calls; past that the
+    language's tool-limit message is returned.
     """
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
@@ -307,9 +352,13 @@ def _ask_anthropic(question: str, language: str) -> str:
     system = _build_system(language)
 
     # The whole exchange is kept here and resent on every turn, so the model
-    # never loses the context of its own tool calls.
-    # The operator's question goes here, never in the system prompt.
-    messages: list[dict[str, object]] = [{"role": "user", "content": question}]
+    # never loses the context of its own tool calls. Earlier exchanges (if the
+    # caller passed any) go first, then the new question - always in a message,
+    # never in the system prompt.
+    messages: list[dict[str, object]] = [
+        *_prepare_history(history),
+        {"role": "user", "content": question},
+    ]
 
     for _turn in range(MAX_TOOL_TURNS):
         response = client.messages.create(
@@ -351,12 +400,22 @@ def _ask_anthropic(question: str, language: str) -> str:
     return TOOL_LIMIT_MESSAGES[language]
 
 
-def ask(question: str, language: str = DEFAULT_LANGUAGE) -> str:
+def ask(
+    question: str,
+    language: str = DEFAULT_LANGUAGE,
+    history: list[dict[str, str]] | None = None,
+) -> str:
     """Answer one operator question using the configured LLM provider.
 
     Args:
         question: the operator's question.
         language: answer language, "fr" (default) or "en".
+        history: optional transcript of earlier exchanges, oldest first, each
+            item ``{"role": "user" | "assistant", "content": <text>}``. When
+            given, the model can resolve a follow-up such as "and machine 2?".
+            Only the last few complete exchanges are replayed (see
+            ``MAX_HISTORY_MESSAGES``); each question still starts a fresh
+            tool-use loop.
 
     The provider is chosen by the ``LLM_PROVIDER`` environment variable
     ("anthropic" by default). Returns the assistant's answer as plain text.
@@ -369,7 +428,7 @@ def ask(question: str, language: str = DEFAULT_LANGUAGE) -> str:
     language = _normalize_language(language)
     provider = os.environ.get("LLM_PROVIDER", "anthropic").strip().lower()
     if provider == "anthropic":
-        return _ask_anthropic(question, language)
+        return _ask_anthropic(question, language, history)
     if provider == "ollama":
         raise NotImplementedError(
             "LLM_PROVIDER=ollama is not implemented yet. "
@@ -381,11 +440,15 @@ def ask(question: str, language: str = DEFAULT_LANGUAGE) -> str:
 
 
 def _interactive_loop(language: str = DEFAULT_LANGUAGE) -> None:
-    """Read questions from the terminal until the operator types 'quit'."""
+    """Read questions from the terminal until the operator types 'quit'.
+
+    Keeps the running transcript so follow-up questions have context.
+    """
     print(
         f"Operator assistant ready (language: {language}). "
         'Ask a question, or type "quit" to exit.'
     )
+    history: list[dict[str, str]] = []
     while True:
         try:
             question = input("> ").strip()
@@ -396,7 +459,10 @@ def _interactive_loop(language: str = DEFAULT_LANGUAGE) -> None:
             return
         if not question:
             continue
-        print(ask(question, language=language))
+        answer = ask(question, language=language, history=history)
+        print(answer)
+        history.append({"role": "user", "content": question})
+        history.append({"role": "assistant", "content": answer})
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
