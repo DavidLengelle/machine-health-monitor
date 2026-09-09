@@ -60,7 +60,13 @@ ALERT_WINDOW_HOURS = 24
 
 # Health light, driven by the alert count over ALERT_WINDOW_HOURS. A threshold
 # breach (a fixed limit crossed) forces red on its own.
-GREEN_MAX_ALERTS = 0
+#
+# WATCH_MIN_ALERTS is set above the IsolationForest's expected false-positive
+# rate: with CONTAMINATION=0.01 the model flags ~1% of readings by construction,
+# so a healthy machine can still collect a handful of isolated alerts over 24 h.
+# Requiring at least this many keeps those machines green and leaves the amber
+# light for a machine that is genuinely drifting.
+WATCH_MIN_ALERTS = 5
 RED_MIN_ALERTS = 20
 
 # Fixed detector limits, taken straight from detection.py so the dashboard and
@@ -95,6 +101,12 @@ def load_machines() -> pd.DataFrame:
     return pd.DataFrame(
         [dict(row) for row in rows], columns=["id", "name", "machine_type"]
     )
+
+
+@st.cache_data(ttl=CACHE_TTL_SECONDS)
+def load_latest_measurement_time() -> str | None:
+    """ISO timestamp of the most recent measurement across all machines, or None."""
+    return db.get_latest_measurement_time()
 
 
 @st.cache_data(ttl=CACHE_TTL_SECONDS)
@@ -171,23 +183,42 @@ def database_status() -> tuple[bool, str]:
     return True, ""
 
 
-def alerts_within_window(alerts: pd.DataFrame) -> pd.DataFrame:
-    """Return the rows of ``alerts`` raised within the last ALERT_WINDOW_HOURS."""
+def window_reference(latest_measurement: str | None) -> pd.Timestamp:
+    """Return the instant the ``last 24 h`` window is measured back from.
+
+    The demo data is simulated and frozen in the past, so counting back from
+    the system clock would leave every stored alert outside the window (the
+    card would show CRITICAL yet "0 alerts"). Anchor on the latest measurement
+    instead; fall back to the system clock only when the database is empty.
+    tools.py anchors its assistant windows on the same instant so the two
+    never disagree.
+    """
+    if latest_measurement is None:
+        return pd.Timestamp.now(tz="UTC")
+    return pd.to_datetime(latest_measurement, utc=True)
+
+
+def alerts_within_window(
+    alerts: pd.DataFrame, reference: pd.Timestamp
+) -> pd.DataFrame:
+    """Return the rows of ``alerts`` raised within ALERT_WINDOW_HOURS of ``reference``."""
     if alerts.empty:
         return alerts
-    cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=ALERT_WINDOW_HOURS)
+    cutoff = reference - pd.Timedelta(hours=ALERT_WINDOW_HOURS)
     return alerts[alerts["raised_at"] >= cutoff]
 
 
 def health_light(recent_alerts: int, threshold_breached: bool) -> tuple[str, str]:
     """Map the recent-alert count and threshold state to ``(emoji, label)``.
 
-    Green: no recent alert. Orange: a few alerts. Red: many alerts, or any
-    fixed limit crossed (that alone is enough to go red).
+    Green: fewer than WATCH_MIN_ALERTS recent alerts (absorbs the detector's
+    expected false positives). Amber: WATCH_MIN_ALERTS or more. Red: many
+    alerts (RED_MIN_ALERTS or more), or any fixed limit crossed (that alone is
+    enough to go red).
     """
     if threshold_breached or recent_alerts >= RED_MIN_ALERTS:
         return "🔴", "CRITICAL"
-    if recent_alerts > GREEN_MAX_ALERTS:
+    if recent_alerts >= WATCH_MIN_ALERTS:
         return "🟠", "WATCH"
     return "🟢", "OK"
 
@@ -198,12 +229,13 @@ def health_light(recent_alerts: int, threshold_breached: bool) -> tuple[str, str
 def render_header(machines: pd.DataFrame) -> None:
     """Render one health card per machine, side by side."""
     st.subheader("Fleet status")
+    reference = window_reference(load_latest_measurement_time())
     columns = st.columns(len(machines))
 
     for column, (_, machine) in zip(columns, machines.iterrows()):
         machine_id = int(machine["id"])
         latest = load_measurements(machine_id, limit=1)
-        recent_alerts = alerts_within_window(load_alerts(machine_id))
+        recent_alerts = alerts_within_window(load_alerts(machine_id), reference)
 
         temperature_text = "—"
         vibration_text = "—"
@@ -532,6 +564,15 @@ def main() -> None:
         st.stop()
 
     machines = load_machines()
+
+    latest_measurement = load_latest_measurement_time()
+    if latest_measurement is not None:
+        shown = pd.to_datetime(latest_measurement, utc=True)
+        st.caption(
+            f"Data is frozen — latest measurement {shown:%Y-%m-%d %H:%M} UTC. "
+            f"The {ALERT_WINDOW_HOURS} h alert window is counted from there, not "
+            f"the system clock."
+        )
 
     render_header(machines)
     st.divider()

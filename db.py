@@ -201,6 +201,22 @@ def get_all_measurements(machine_id: int) -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def get_latest_measurement_time() -> str | None:
+    """Return the most recent ``recorded_at`` across all machines, or None.
+
+    The demo data set is simulated and frozen in the past, so a "last 24 h"
+    window counted from the system clock would leave every stored row outside
+    it. The dashboard and the operator tools anchor their sliding window on
+    this instant instead, falling back to the system clock only when this
+    returns None (an empty database).
+    """
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT MAX(recorded_at) AS latest FROM measurements"
+        ).fetchone()
+    return row["latest"] if row is not None else None
+
+
 def get_alerts(limit: int = 50) -> list[sqlite3.Row]:
     """Return the most recent alerts across all machines, newest first."""
     with _connect() as conn:

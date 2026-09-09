@@ -39,9 +39,29 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+def _reference_time() -> datetime:
+    """Return the instant the recent-data windows are measured back from.
+
+    The demo data is simulated and frozen in the past, so counting a window
+    back from the system clock would leave every stored row outside it. Anchor
+    on the most recent measurement instead; fall back to the system clock only
+    when the database holds no measurement yet. app.py anchors its dashboard
+    cards on the same instant, so the assistant and the dashboard never
+    disagree about "the last 24 h".
+    """
+    latest = db.get_latest_measurement_time()
+    if latest is None:
+        return _utc_now()
+    return datetime.fromisoformat(latest)
+
+
 def _since_iso(hours: float) -> str:
-    """Return the ISO timestamp of ``hours`` ago, matching the stored format."""
-    return (_utc_now() - timedelta(hours=hours)).isoformat()
+    """Return the ISO timestamp ``hours`` before the reference time.
+
+    See :func:`_reference_time`: the reference is the latest measurement, not
+    the system clock.
+    """
+    return (_reference_time() - timedelta(hours=hours)).isoformat()
 
 
 def _round(value: float | None, digits: int) -> float | None:
@@ -134,7 +154,8 @@ def get_measurement_stats(
 
     Args:
         machine_id: numeric id of the machine.
-        hours: length of the window in hours, counted back from now.
+        hours: length of the window in hours, counted back from the most
+            recent measurement (see :func:`_reference_time`).
 
     When the window holds no measurement, ``sample_count`` is 0 and the
     statistics are null.
@@ -283,8 +304,8 @@ TOOL_DEFINITIONS: list[dict[str, object]] = [
                     "type": "number",
                     "description": (
                         "Length of the time window in hours, counted back "
-                        "from now. For example 1 means the last hour and 24 "
-                        "means the last day. Defaults to "
+                        "from the most recent measurement. For example 1 means "
+                        "the last hour and 24 means the last day. Defaults to "
                         f"{DEFAULT_STATS_HOURS}."
                     ),
                     "minimum": 0.01,
