@@ -1,0 +1,11 @@
+# Projector-friendly light theme for the operator dashboard (app.py).
+# Strong contrast, no dark background, so the room can still read it.
+[theme]
+base = "light"
+primaryColor = "#1f4e79"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#eef2f7"
+textColor = "#141414"
+
+[browser]
+gatherUsageStats = false

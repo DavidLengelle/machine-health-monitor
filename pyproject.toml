@@ -12,14 +12,16 @@ readme = "README.md"
 requires-python = ">=3.11"
 
 # db.py and simulator.py use the standard library only. detection.py adds the
-# data-science stack; assistant.py adds the LLM client and .env loader
-# (see .env.example for the configuration it expects).
+# data-science stack; assistant.py adds the LLM client and .env loader; app.py
+# adds the Streamlit operator dashboard (see .env.example for the configuration
+# the assistant expects).
 dependencies = [
     "pandas>=2.0",
     "scikit-learn>=1.3",
     "joblib>=1.3",
     "anthropic>=0.40",
     "python-dotenv>=1.0",
+    "streamlit>=1.32",
 ]
 
 [tool.uv]
